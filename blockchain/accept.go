@@ -79,7 +79,7 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 	newNode.status = statusDataStored
 	br := repository.NewRepository[*blockchainBlock.BlockchainBlock](b.dbClient, shared.DatabaseName)
 	tr := repository.NewRepository[*blockchainTransaction.BlockchainTransaction](b.dbClient, shared.DatabaseName)
-	dbObj, err := br.Get(bson.D{{"height", blockHeight}}, nil, repository.BlockCollectionName)
+	dbObj, err := br.Get(bson.D{{"height", blockHeight}, {"coin", shared.Bitcoin_Coin_Name}}, nil, repository.BlockCollectionName)
 	if dbObj == nil {
 		databaseBlock := &blockchainBlock.BlockchainBlock{
 			Id: primitive.NewObjectID(),
