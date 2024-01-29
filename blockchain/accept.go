@@ -5,7 +5,18 @@
 package blockchain
 
 import (
+	"encoding/hex"
 	"fmt"
+	"github.com/btcsuite/btcd/blockchainBlock"
+	"github.com/btcsuite/btcd/blockchainTransaction"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/repository"
+	"github.com/btcsuite/btcd/shared"
+	"github.com/btcsuite/btcd/txscript"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"strconv"
+	"time"
 
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/database"
@@ -66,7 +77,76 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 	blockHeader := &block.MsgBlock().Header
 	newNode := newBlockNode(blockHeader, prevNode)
 	newNode.status = statusDataStored
+	br := repository.NewRepository[*blockchainBlock.BlockchainBlock](b.dbClient, shared.DatabaseName)
+	tr := repository.NewRepository[*blockchainTransaction.BlockchainTransaction](b.dbClient, shared.DatabaseName)
+	dbObj, err := br.Get(bson.D{{"height", blockHeight}}, nil, repository.BlockCollectionName)
+	if err != nil {
+		fmt.Println(err)
+	}
+	if dbObj == nil {
+		databaseBlock := &blockchainBlock.BlockchainBlock{
+			Id: primitive.NewObjectID(),
+			DatabaseObject: repository.DatabaseObject{
+				UpdatedAt: time.Now().UTC(),
+				CreatedAt: time.Now().UTC(),
+				IsActive:  true,
+			},
+			Version:           blockHeader.Version,
+			Hash:              blockHeader.BlockHash().String(),
+			PreviousBlockHash: blockHeader.PrevBlock.String(),
+			MerkleRoot:        blockHeader.MerkleRoot.String(),
+			Timestamp:         blockHeader.Timestamp,
+			Bits:              blockHeader.Bits,
+			Nonce:             blockHeader.Nonce,
+			Height:            uint32(blockHeight),
+			Coin:              shared.Bitcoin_Coin_Name,
+		}
+		insertedBlock, err := br.Create(databaseBlock, repository.BlockCollectionName)
+		if err != nil {
+			fmt.Println(err)
+		}
+		databaseBlock = *insertedBlock
+		for _, transaction := range block.Transactions() {
+			for _, out := range transaction.MsgTx().TxOut {
+				script, err := hex.DecodeString(fmt.Sprintf("%x", out.PkScript))
+				if err != nil {
+					fmt.Println(err)
+				}
 
+				// Extract and print details from the script.
+				scriptClass, addresses, reqSigs, err := txscript.ExtractPkScriptAddrs(
+					script, &chaincfg.MainNetParams)
+				bitcoinAddresses := []string{}
+				for _, address := range addresses {
+					bitcoinAddresses = append(bitcoinAddresses, address.String())
+				}
+				stringAmount := strconv.FormatInt(out.Value, 10)
+				transactionAmount, err := primitive.ParseDecimal128(stringAmount)
+				if err != nil {
+
+				}
+				databaseTransaction := &blockchainTransaction.BlockchainTransaction{
+					Id: primitive.NewObjectID(),
+					DatabaseObject: repository.DatabaseObject{
+						UpdatedAt: time.Now().UTC(),
+						CreatedAt: time.Now().UTC(),
+						IsActive:  true,
+					},
+					Amount:                 transactionAmount,
+					ScriptClass:            scriptClass.String(),
+					BlockHash:              blockHeader.BlockHash().String(),
+					Addresses:              bitcoinAddresses,
+					RequiredSignatureCount: reqSigs,
+					Coin:                   shared.Bitcoin_Coin_Name,
+				}
+				insertedTransaction, err := tr.Create(databaseTransaction, repository.TransactionCollectionName)
+				if err != nil {
+					fmt.Println(err)
+				}
+				databaseTransaction = *insertedTransaction
+			}
+		}
+	}
 	b.index.AddNode(newNode)
 	err = b.index.flushToDB()
 	if err != nil {

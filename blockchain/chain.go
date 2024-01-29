@@ -7,7 +7,10 @@ package blockchain
 
 import (
 	"container/list"
+	"context"
 	"fmt"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"sync"
 	"time"
 
@@ -97,6 +100,7 @@ type BlockChain struct {
 	checkpoints         []chaincfg.Checkpoint
 	checkpointsByHeight map[int32]*chaincfg.Checkpoint
 	db                  database.DB
+	dbClient            *mongo.Client
 	chainParams         *chaincfg.Params
 	timeSource          MedianTimeSource
 	sigCache            *txscript.SigCache
@@ -1853,6 +1857,12 @@ type Config struct {
 	// This field is required.
 	DB database.DB
 
+	MongoDbConfiguration struct {
+		MongodbConnectionString string
+		MongodbUsername         string
+		MongodbPassword         string
+	}
+
 	// The maximum size in bytes of the UTXO cache.
 	//
 	// This field is required.
@@ -1954,10 +1964,23 @@ func New(config *Config) (*BlockChain, error) {
 	targetTimespan := int64(params.TargetTimespan / time.Second)
 	targetTimePerBlock := int64(params.TargetTimePerBlock / time.Second)
 	adjustmentFactor := params.RetargetAdjustmentFactor
+	dbCredential := options.Credential{
+		Username:      config.MongoDbConfiguration.MongodbUsername,
+		Password:      config.MongoDbConfiguration.MongodbPassword,
+		AuthMechanism: "SCRAM-SHA-256",
+		AuthSource:    "admin",
+	}
+	dbOptions := &options.ClientOptions{}
+	dbOptions.ApplyURI(config.MongoDbConfiguration.MongodbConnectionString).SetAuth(dbCredential)
+	dbClient, err := mongo.Connect(context.TODO(), dbOptions)
+	if err != nil {
+		fmt.Println(err)
+	}
 	b := BlockChain{
 		checkpoints:         config.Checkpoints,
 		checkpointsByHeight: checkpointsByHeight,
 		db:                  config.DB,
+		dbClient:            dbClient,
 		chainParams:         params,
 		timeSource:          config.TimeSource,
 		sigCache:            config.SigCache,

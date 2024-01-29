@@ -8,6 +8,7 @@ package blockchain_test
 import (
 	"bytes"
 	"fmt"
+	Services "github.com/btcsuite/btcd/services"
 	"os"
 	"path/filepath"
 	"testing"
@@ -114,8 +115,29 @@ func chainSetup(dbName string, params *chaincfg.Params) (*blockchain.BlockChain,
 	paramsCopy := *params
 
 	// Create the main chain instance.
+	config, err := Services.NewConfigHelper("appSettings.json")
+	if err != nil {
+		fmt.Println(err)
+	}
+	dbConnectionString, err := config.GetSection("MongodbConnectionString")
+	if err != nil {
+		fmt.Println(err)
+	}
+	dbUsername, err := config.GetSection("MongodbUsername")
+	if err != nil {
+		fmt.Println(err)
+	}
+	dbPassword, err := config.GetSection("MongodbPassword")
+	if err != nil {
+		fmt.Println(err)
+	}
 	chain, err := blockchain.New(&blockchain.Config{
-		DB:          db,
+		DB: db,
+		MongoDbConfiguration: struct {
+			MongodbConnectionString string
+			MongodbUsername         string
+			MongodbPassword         string
+		}{MongodbConnectionString: dbConnectionString.(string), MongodbUsername: dbUsername.(string), MongodbPassword: dbPassword.(string)},
 		ChainParams: &paramsCopy,
 		Checkpoints: nil,
 		TimeSource:  blockchain.NewMedianTime(),
