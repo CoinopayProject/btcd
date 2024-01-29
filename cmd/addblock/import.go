@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	Services "github.com/btcsuite/btcd/services"
 	"io"
 	"sync"
 	"time"
@@ -339,9 +340,29 @@ func newBlockImporter(db database.DB, r io.ReadSeeker) (*blockImporter, error) {
 	if len(indexes) > 0 {
 		indexManager = indexers.NewManager(db, indexes)
 	}
-
+	config, err := Services.NewConfigHelper("appSettings.json")
+	if err != nil {
+		fmt.Println(err)
+	}
+	dbConnectionString, err := config.GetSection("MongodbConnectionString")
+	if err != nil {
+		fmt.Println(err)
+	}
+	dbUsername, err := config.GetSection("MongodbUsername")
+	if err != nil {
+		fmt.Println(err)
+	}
+	dbPassword, err := config.GetSection("MongodbPassword")
+	if err != nil {
+		fmt.Println(err)
+	}
 	chain, err := blockchain.New(&blockchain.Config{
-		DB:           db,
+		DB: db,
+		MongoDbConfiguration: struct {
+			MongodbConnectionString string
+			MongodbUsername         string
+			MongodbPassword         string
+		}{MongodbConnectionString: dbConnectionString.(string), MongodbUsername: dbUsername.(string), MongodbPassword: dbPassword.(string)},
 		ChainParams:  activeNetParams,
 		TimeSource:   blockchain.NewMedianTime(),
 		IndexManager: indexManager,
