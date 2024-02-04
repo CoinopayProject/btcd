@@ -109,7 +109,6 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 				if err != nil {
 					fmt.Println(err)
 				}
-
 				// Extract and print details from the script.
 				scriptClass, addresses, reqSigs, err := txscript.ExtractPkScriptAddrs(
 					script, &chaincfg.MainNetParams)
@@ -129,6 +128,8 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 						CreatedAt: time.Now().UTC(),
 						IsActive:  true,
 					},
+					TransactionId:          transaction.Hash().String(),
+					WitnessHash:            transaction.WitnessHash().String(),
 					Amount:                 transactionAmount,
 					ScriptClass:            scriptClass.String(),
 					BlockHash:              blockHeader.BlockHash().String(),

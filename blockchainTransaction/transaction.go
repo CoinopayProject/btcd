@@ -8,6 +8,8 @@ import (
 type BlockchainTransaction struct {
 	Id primitive.ObjectID `bson:"_id"`
 	repository.DatabaseObject
+	TransactionId          string
+	WitnessHash            string
 	Amount                 primitive.Decimal128
 	ScriptClass            string
 	Addresses              []string
