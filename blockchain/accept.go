@@ -79,6 +79,7 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 	newNode.status = statusDataStored
 	br := repository.NewRepository[*blockchainBlock.BlockchainBlock](b.dbClient, shared.DatabaseName)
 	tr := repository.NewRepository[*blockchainTransaction.BlockchainTransaction](b.dbClient, shared.DatabaseName)
+	trxInr := repository.NewRepository[*blockchainTransaction.BlockchainTransactionInput](b.dbClient, shared.DatabaseName)
 	dbObj, err := br.Get(bson.D{{"height", blockHeight}, {"coin", shared.Bitcoin_Coin_Name}}, nil, repository.BlockCollectionName)
 	if dbObj == nil {
 		databaseBlock := &blockchainBlock.BlockchainBlock{
@@ -98,13 +99,34 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 			Height:            uint32(blockHeight),
 			Coin:              shared.Bitcoin_Coin_Name,
 		}
-		insertedBlock, err := br.Create(databaseBlock, repository.BlockCollectionName)
-		if err != nil {
-			fmt.Println(err)
-		}
+		insertedBlock, _ := br.Create(databaseBlock, repository.BlockCollectionName)
 		databaseBlock = *insertedBlock
-		for _, transaction := range block.Transactions() {
-			for _, out := range transaction.MsgTx().TxOut {
+	}
+	for _, transaction := range block.Transactions() {
+		for _, trx := range transaction.MsgTx().TxIn {
+			trxFilter := bson.D{{"transactionid", transaction.Hash().String()}}
+			trxIn, _ := trxInr.Get(trxFilter, nil, repository.TransactionInputCollectionName)
+			if trxIn == nil {
+				txIn := &blockchainTransaction.BlockchainTransactionInput{
+					TxIn: *trx,
+					DatabaseObject: repository.DatabaseObject{
+						UpdatedAt: time.Now().UTC(),
+						CreatedAt: time.Now().UTC(),
+						IsActive:  true,
+					},
+					TransactionId: transaction.Hash().String(),
+					WitnessHash:   transaction.WitnessHash().String(),
+					BlockHash:     block.Hash().String(),
+					Coin:          shared.Bitcoin_Coin_Name,
+				}
+				insertedTxIn, _ := trxInr.Create(txIn, repository.TransactionInputCollectionName)
+				txIn = *insertedTxIn
+			}
+		}
+		for _, out := range transaction.MsgTx().TxOut {
+			trxFilter := bson.D{{"transactionid", transaction.Hash().String()}}
+			trxOut, _ := tr.Get(trxFilter, nil, repository.TransactionCollectionName)
+			if trxOut == nil {
 				script, err := hex.DecodeString(fmt.Sprintf("%x", out.PkScript))
 				if err != nil {
 					fmt.Println(err)
