@@ -16,7 +16,6 @@ import (
 	"github.com/btcsuite/btcd/repository"
 	"github.com/btcsuite/btcd/shared"
 	"github.com/btcsuite/btcd/txscript"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 
 	"github.com/btcsuite/btcd/btcutil"
@@ -81,70 +80,69 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 	br := repository.NewRepository[*blockchainBlock.BlockchainBlock](b.dbClient, shared.DatabaseName)
 	tr := repository.NewRepository[*blockchainTransaction.BlockchainTransaction](b.dbClient, shared.DatabaseName)
 	trxInr := repository.NewRepository[*blockchainTransaction.BlockchainTransactionInput](b.dbClient, shared.DatabaseName)
-		databaseBlock := &blockchainBlock.BlockchainBlock{
-			Id: primitive.NewObjectID(),
-			DatabaseObject: repository.DatabaseObject{
-				UpdatedAt: time.Now().UTC(),
-				CreatedAt: time.Now().UTC(),
-				IsActive:  true,
-			},
-			Version:           blockHeader.Version,
-			Hash:              blockHeader.BlockHash().String(),
-			PreviousBlockHash: blockHeader.PrevBlock.String(),
-			MerkleRoot:        blockHeader.MerkleRoot.String(),
-			Timestamp:         blockHeader.Timestamp,
-			Bits:              blockHeader.Bits,
-			Nonce:             blockHeader.Nonce,
-			Height:            uint32(blockHeight),
-			Coin:              shared.Bitcoin_Coin_Name,
-		}
-		br.Create(databaseBlock, repository.BlockCollectionName)
-		for _, transaction := range block.Transactions() {
-			for _, trx := range transaction.MsgTx().TxIn {
+	databaseBlock := &blockchainBlock.BlockchainBlock{
+		Id: primitive.NewObjectID(),
+		DatabaseObject: repository.DatabaseObject{
+			UpdatedAt: time.Now().UTC(),
+			CreatedAt: time.Now().UTC(),
+			IsActive:  true,
+		},
+		Version:           blockHeader.Version,
+		Hash:              blockHeader.BlockHash().String(),
+		PreviousBlockHash: blockHeader.PrevBlock.String(),
+		MerkleRoot:        blockHeader.MerkleRoot.String(),
+		Timestamp:         blockHeader.Timestamp,
+		Bits:              blockHeader.Bits,
+		Nonce:             blockHeader.Nonce,
+		Height:            uint32(blockHeight),
+		Coin:              shared.Bitcoin_Coin_Name,
+	}
+	br.Create(databaseBlock, repository.BlockCollectionName)
+	for _, transaction := range block.Transactions() {
+		for _, trx := range transaction.MsgTx().TxIn {
 
-				txIn := &blockchainTransaction.BlockchainTransactionInput{
-					TxIn: *trx,
-					DatabaseObject: repository.DatabaseObject{
-						UpdatedAt: time.Now().UTC(),
-						CreatedAt: time.Now().UTC(),
-						IsActive:  true,
-					},
-					TransactionId: transaction.Hash().String(),
-					WitnessHash:   transaction.WitnessHash().String(),
-					BlockHash:     block.Hash().String(),
-					Coin:          shared.Bitcoin_Coin_Name,
-				}
-				trxInr.Create(txIn, repository.TransactionInputCollectionName)
+			txIn := &blockchainTransaction.BlockchainTransactionInput{
+				TxIn: *trx,
+				DatabaseObject: repository.DatabaseObject{
+					UpdatedAt: time.Now().UTC(),
+					CreatedAt: time.Now().UTC(),
+					IsActive:  true,
+				},
+				TransactionId: transaction.Hash().String(),
+				WitnessHash:   transaction.WitnessHash().String(),
+				BlockHash:     block.Hash().String(),
+				Coin:          shared.Bitcoin_Coin_Name,
 			}
-			for _, out := range transaction.MsgTx().TxOut {
-				script, err := hex.DecodeString(fmt.Sprintf("%x", out.PkScript))
-				// Extract and print details from the script.
-				scriptClass, addresses, reqSigs, err := txscript.ExtractPkScriptAddrs(
-					script, &chaincfg.MainNetParams)
-				bitcoinAddresses := []string{}
-				for _, address := range addresses {
-					bitcoinAddresses = append(bitcoinAddresses, address.String())
-				}
-				stringAmount := strconv.FormatInt(out.Value, 10)
-				transactionAmount, err := primitive.ParseDecimal128(stringAmount)
-				databaseTransaction := &blockchainTransaction.BlockchainTransaction{
-					Id: primitive.NewObjectID(),
-					DatabaseObject: repository.DatabaseObject{
-						UpdatedAt: time.Now().UTC(),
-						CreatedAt: time.Now().UTC(),
-						IsActive:  true,
-					},
-					TransactionId:          transaction.Hash().String(),
-					WitnessHash:            transaction.WitnessHash().String(),
-					Amount:                 transactionAmount,
-					ScriptClass:            scriptClass.String(),
-					BlockHash:              blockHeader.BlockHash().String(),
-					Addresses:              bitcoinAddresses,
-					RequiredSignatureCount: reqSigs,
-					Coin:                   shared.Bitcoin_Coin_Name,
-				}
-				tr.Create(databaseTransaction, repository.TransactionCollectionName)
+			trxInr.Create(txIn, repository.TransactionInputCollectionName)
+		}
+		for _, out := range transaction.MsgTx().TxOut {
+			script, _ := hex.DecodeString(fmt.Sprintf("%x", out.PkScript))
+			// Extract and print details from the script.
+			scriptClass, addresses, reqSigs, _ := txscript.ExtractPkScriptAddrs(
+				script, &chaincfg.MainNetParams)
+			bitcoinAddresses := []string{}
+			for _, address := range addresses {
+				bitcoinAddresses = append(bitcoinAddresses, address.String())
 			}
+			stringAmount := strconv.FormatInt(out.Value, 10)
+			transactionAmount, _ := primitive.ParseDecimal128(stringAmount)
+			databaseTransaction := &blockchainTransaction.BlockchainTransaction{
+				Id: primitive.NewObjectID(),
+				DatabaseObject: repository.DatabaseObject{
+					UpdatedAt: time.Now().UTC(),
+					CreatedAt: time.Now().UTC(),
+					IsActive:  true,
+				},
+				TransactionId:          transaction.Hash().String(),
+				WitnessHash:            transaction.WitnessHash().String(),
+				Amount:                 transactionAmount,
+				ScriptClass:            scriptClass.String(),
+				BlockHash:              blockHeader.BlockHash().String(),
+				Addresses:              bitcoinAddresses,
+				RequiredSignatureCount: reqSigs,
+				Coin:                   shared.Bitcoin_Coin_Name,
+			}
+			tr.Create(databaseTransaction, repository.TransactionCollectionName)
 		}
 	}
 	b.index.AddNode(newNode)
