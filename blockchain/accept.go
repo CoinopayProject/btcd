@@ -7,6 +7,9 @@ package blockchain
 import (
 	"encoding/hex"
 	"fmt"
+	"strconv"
+	"time"
+
 	"github.com/btcsuite/btcd/blockchainBlock"
 	"github.com/btcsuite/btcd/blockchainTransaction"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -15,8 +18,6 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"strconv"
-	"time"
 
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/database"
@@ -80,8 +81,6 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 	br := repository.NewRepository[*blockchainBlock.BlockchainBlock](b.dbClient, shared.DatabaseName)
 	tr := repository.NewRepository[*blockchainTransaction.BlockchainTransaction](b.dbClient, shared.DatabaseName)
 	trxInr := repository.NewRepository[*blockchainTransaction.BlockchainTransactionInput](b.dbClient, shared.DatabaseName)
-	dbObj, err := br.Get(bson.D{{"height", blockHeight}, {"coin", shared.Bitcoin_Coin_Name}}, nil, repository.BlockCollectionName)
-	if dbObj == nil {
 		databaseBlock := &blockchainBlock.BlockchainBlock{
 			Id: primitive.NewObjectID(),
 			DatabaseObject: repository.DatabaseObject{
@@ -99,14 +98,10 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 			Height:            uint32(blockHeight),
 			Coin:              shared.Bitcoin_Coin_Name,
 		}
-		insertedBlock, _ := br.Create(databaseBlock, repository.BlockCollectionName)
-		databaseBlock = *insertedBlock
-	}
-	for _, transaction := range block.Transactions() {
-		for _, trx := range transaction.MsgTx().TxIn {
-			trxFilter := bson.D{{"transactionid", transaction.Hash().String()}}
-			trxIn, _ := trxInr.Get(trxFilter, nil, repository.TransactionInputCollectionName)
-			if trxIn == nil {
+		br.Create(databaseBlock, repository.BlockCollectionName)
+		for _, transaction := range block.Transactions() {
+			for _, trx := range transaction.MsgTx().TxIn {
+
 				txIn := &blockchainTransaction.BlockchainTransactionInput{
 					TxIn: *trx,
 					DatabaseObject: repository.DatabaseObject{
@@ -119,18 +114,10 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 					BlockHash:     block.Hash().String(),
 					Coin:          shared.Bitcoin_Coin_Name,
 				}
-				insertedTxIn, _ := trxInr.Create(txIn, repository.TransactionInputCollectionName)
-				txIn = *insertedTxIn
+				trxInr.Create(txIn, repository.TransactionInputCollectionName)
 			}
-		}
-		for _, out := range transaction.MsgTx().TxOut {
-			trxFilter := bson.D{{"transactionid", transaction.Hash().String()}}
-			trxOut, _ := tr.Get(trxFilter, nil, repository.TransactionCollectionName)
-			if trxOut == nil {
+			for _, out := range transaction.MsgTx().TxOut {
 				script, err := hex.DecodeString(fmt.Sprintf("%x", out.PkScript))
-				if err != nil {
-					fmt.Println(err)
-				}
 				// Extract and print details from the script.
 				scriptClass, addresses, reqSigs, err := txscript.ExtractPkScriptAddrs(
 					script, &chaincfg.MainNetParams)
@@ -140,9 +127,6 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 				}
 				stringAmount := strconv.FormatInt(out.Value, 10)
 				transactionAmount, err := primitive.ParseDecimal128(stringAmount)
-				if err != nil {
-
-				}
 				databaseTransaction := &blockchainTransaction.BlockchainTransaction{
 					Id: primitive.NewObjectID(),
 					DatabaseObject: repository.DatabaseObject{
@@ -159,11 +143,7 @@ func (b *BlockChain) maybeAcceptBlock(block *btcutil.Block, flags BehaviorFlags)
 					RequiredSignatureCount: reqSigs,
 					Coin:                   shared.Bitcoin_Coin_Name,
 				}
-				insertedTransaction, err := tr.Create(databaseTransaction, repository.TransactionCollectionName)
-				if err != nil {
-					fmt.Println(err)
-				}
-				databaseTransaction = *insertedTransaction
+				tr.Create(databaseTransaction, repository.TransactionCollectionName)
 			}
 		}
 	}
